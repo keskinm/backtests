@@ -160,6 +160,8 @@ class DQN:
 class ContinuousDQN(DQN):
     """Deep Q learning network with continuous action space."""
 
+    name = "ContinuousDQN"
+
     def __init__(self, state_size):
         DQN.__init__(self, state_size)
 
