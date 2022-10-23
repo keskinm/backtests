@@ -16,11 +16,15 @@ from functions import get_state, get_stock_data_vec, format_price
 class DQN:
     name = "DQN"
 
-    def __init__(self, state_size, is_eval=False, model_path="", is_discret=True, money=500, shares=0):
+    def __init__(self, state_size, is_eval=False, model_path="", money=500, shares=0):
+        self.action_space = {
+            0: "sit",
+            1: "buy",
+            2: "sell"
+        }
         self.money = money
         self.shares = shares
 
-        self.is_discret = is_discret
         self.state_size = state_size  # normalized previous days
 
         self.memory = deque(maxlen=1000)
@@ -43,10 +47,7 @@ class DQN:
         model.add(Dense(units=64, input_dim=self.state_size, activation="relu"))
         model.add(Dense(units=32, activation="relu"))
         model.add(Dense(units=8, activation="relu"))
-        if self.is_discret:
-            model.add(Dense(3, activation="linear"))
-        else:
-            model.add(Dense(1, activation="linear"))
+        model.add(Dense(3, activation="linear"))
         model.compile(loss="mse", optimizer=Adam(lr=0.001))
         return model
 
@@ -124,7 +125,6 @@ class DQN:
     def evaluate(self, stock_name):
         data = get_stock_data_vec(stock_name)
         l = len(data) - 1
-        batch_size = 32
 
         state = get_state(data, 0, self.state_size + 1)
         total_profit = 0
@@ -155,3 +155,111 @@ class DQN:
                 print("--------------------------------")
                 print(stock_name + " Total Profit: " + format_price(total_profit))
                 print("--------------------------------")
+
+
+class ContinuousDQN(DQN):
+    """Deep Q learning network with continuous action space."""
+
+    def __init__(self, state_size):
+        DQN.__init__(self, state_size)
+
+    def _model(self):
+        model = Sequential()
+        model.add(Dense(units=64, input_dim=self.state_size, activation="relu"))
+        model.add(Dense(units=32, activation="relu"))
+        model.add(Dense(units=8, activation="relu"))
+        model.add(Dense(1, activation="linear"))
+        model.compile(loss="mse", optimizer=Adam(lr=0.001))
+        return model
+
+    def interpret_prediction(self, output):
+        if -0.2 < output < 0.2:
+            output = 0
+        if output > 0:
+            output *= self.money
+        if output < 0:
+            output *= self.shares
+        return output
+
+    def act(self, state):
+        if not self.is_eval and np.random.rand() <= self.epsilon:
+            interval = [-self.shares, self.money]
+            action = random.randrange(3)
+            if action == 0:
+                mean = (interval[0] + interval[1]) / 2
+                variance = (interval[1] - interval[0]) * 0.4
+            elif action == 1:
+                mean = (interval[0] + 2*interval[1]) / 3
+                variance = (interval[1] - interval[0]) * 0.1
+            elif action == 2:
+                mean = (2*interval[0] + interval[1]) / 3
+                variance = (interval[1] - interval[0]) * 0.1
+            else:
+                raise ValueError
+            return np.random.normal(mean, variance, size=(2, 4))
+
+        return self.interpret_prediction(self.model.predict(state))
+
+    def expReplay(self, batch_size):
+        mini_batch = []
+        l = len(self.memory)
+        for i in range(l - batch_size + 1, l):
+            mini_batch.append(self.memory[i])
+
+        for state, action, reward, next_state, done in mini_batch:
+            target = reward
+            if not done:
+                target = reward + self.gamma * self.interpret_prediction(self.model.predict(next_state))
+
+            self.model.fit(state, target, epochs=1, verbose=0)
+
+        if self.epsilon > self.epsilon_min:
+            self.epsilon *= self.epsilon_decay
+
+    def train(self, stock_name, episode_count):
+        data = get_stock_data_vec(stock_name)
+        l = len(data) - 1
+        batch_size = 32
+
+        for e in range(episode_count + 1):
+            print("Episode " + str(e) + "/" + str(episode_count))
+            state = get_state(data, 0, self.state_size + 1)
+
+            total_profit = 0
+            self.inventory = []
+
+            for t in range(l):
+                action = self.act(state)
+
+                # sit
+                next_state = get_state(data, t + 1, self.state_size + 1)
+                reward = 0
+
+                if action > 0:  # buy
+                    self.inventory.append(data[t]*action)
+                    print("Buy: " + format_price(data[t]))
+
+                elif action < 0 and len(self.inventory) > 0:  # sell
+                    bought_price = self.inventory.pop(0)
+                    sold_share = data[t]*-action
+                    profit = data[t]*-action - bought_price
+                    reward = max(profit, 0)
+                    total_profit += profit
+                    print("Sell: " + format_price(sold_share) + " | Profit: " + format_price(profit))
+
+                done = True if t == l - 1 else False
+                self.memory.append((state, action, reward, next_state, done))
+                state = next_state
+
+                if done:
+                    print("--------------------------------")
+                    print("Total Profit: " + format_price(total_profit))
+                    print("--------------------------------")
+
+                if len(self.memory) > batch_size:
+                    self.expReplay(batch_size)
+
+            if e % 10 == 0:
+                if not self.model_dir_path.exists():
+                    os.makedirs(self.model_dir_path, exist_ok=True)
+                self.model.save(self.model_dir_path / f"model_ep{e}")
