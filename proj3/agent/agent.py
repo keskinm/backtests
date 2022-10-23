@@ -10,13 +10,13 @@ import numpy as np
 import random
 from collections import deque
 
-from functions import get_state, get_stock_data_vec, format_price
+from functions import get_state, get_stock_data_vec, format_price, sigmoid
 
 
 class DQN:
     name = "DQN"
 
-    def __init__(self, state_size, is_eval=False, model_path="", money=500, shares=0):
+    def __init__(self, state_size, is_eval=False, model_path="", money=3000, shares=0):
         self.action_space = {
             0: "sit",
             1: "buy",
@@ -47,7 +47,7 @@ class DQN:
         model.add(Dense(units=64, input_dim=self.state_size, activation="relu"))
         model.add(Dense(units=32, activation="relu"))
         model.add(Dense(units=8, activation="relu"))
-        model.add(Dense(3, activation="linear"))
+        model.add(Dense(3, activation="sigmoid"))
         model.compile(loss="mse", optimizer=Adam(lr=0.001))
         return model
 
@@ -174,7 +174,7 @@ class ContinuousDQN(DQN):
         model.compile(loss="mse", optimizer=Adam(lr=0.001))
         return model
 
-    def interpret_prediction(self, output):
+    def rescale_prediction(self, output):
         if -0.2 < output < 0.2:
             output = 0
         if output > 0:
@@ -188,19 +188,26 @@ class ContinuousDQN(DQN):
             interval = [-self.shares, self.money/current_price]
             action = random.randrange(3)
             if action == 0:
-                mean = (interval[0] + interval[1]) / 2
-                variance = (interval[1] - interval[0]) * 0.4
+                # mean = (interval[0] + interval[1]) / 2
+                # variance = (interval[1] - interval[0]) * 0.4
+                mean = 0
+                variance = 0.0001
             elif action == 1:
-                mean = (interval[0] + 2*interval[1]) / 3
-                variance = (interval[1] - interval[0]) * 0.1
+                # mean = (interval[0] + 2*interval[1]) / 3
+                # variance = (interval[1] - interval[0]) * 0.1
+                mean = -self.shares/100
+                variance = 0.0001
             elif action == 2:
-                mean = (2*interval[0] + interval[1]) / 3
-                variance = (interval[1] - interval[0]) * 0.1
+                # mean = (2*interval[0] + interval[1]) / 3
+                # variance = (interval[1] - interval[0]) * 0.1
+                mean = self.money/current_price/100
+                variance = 0.0001
             else:
                 raise ValueError
-            return np.random.normal(mean, variance)
+            r = np.random.normal(mean, variance)
+            return r
 
-        return self.interpret_prediction(self.model.predict(state))
+        return self.rescale_prediction(self.model.predict(state))
 
     def expReplay(self, batch_size):
         mini_batch = []
@@ -213,9 +220,9 @@ class ContinuousDQN(DQN):
 
             target = reward
             if not done:
-                target = -reward + self.gamma * self.interpret_prediction(self.model.predict(next_state))
+                target = sigmoid(-reward) + self.gamma * self.model.predict(next_state)
 
-            self.model.fit(state, np.array([target]), epochs=1, verbose=0)
+            self.model.fit(state, np.array([[target]]), epochs=1, verbose=0)
 
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
