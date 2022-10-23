@@ -181,9 +181,9 @@ class ContinuousDQN(DQN):
             output *= self.shares
         return output
 
-    def act(self, state):
+    def act(self, state, current_price):
         if not self.is_eval and np.random.rand() <= self.epsilon:
-            interval = [-self.shares, self.money]
+            interval = [-self.shares, self.money/current_price]
             action = random.randrange(3)
             if action == 0:
                 mean = (interval[0] + interval[1]) / 2
@@ -207,9 +207,11 @@ class ContinuousDQN(DQN):
             mini_batch.append(self.memory[i])
 
         for state, action, reward, next_state, done in mini_batch:
+            reward = np.log(1+reward)
+
             target = reward
             if not done:
-                target = reward + self.gamma * self.interpret_prediction(self.model.predict(next_state))
+                target = -reward + self.gamma * self.interpret_prediction(self.model.predict(next_state))
 
             self.model.fit(state, target, epochs=1, verbose=0)
 
@@ -226,26 +228,28 @@ class ContinuousDQN(DQN):
             state = get_state(data, 0, self.state_size + 1)
 
             total_profit = 0
-            self.inventory = []
 
             for t in range(l):
-                action = self.act(state)
+                current_price = data[t]
+                action = self.act(state, current_price)
 
                 # sit
                 next_state = get_state(data, t + 1, self.state_size + 1)
                 reward = 0
 
                 if action > 0:  # buy
-                    self.inventory.append(data[t]*action)
-                    print("Buy: " + format_price(data[t]))
+                    self.money -= current_price*action
+                    self.shares += action
+                    print("Buy: " + format_price(current_price*action))
 
-                elif action < 0 and len(self.inventory) > 0:  # sell
-                    bought_price = self.inventory.pop(0)
-                    sold_share = data[t]*-action
-                    profit = data[t]*-action - bought_price
-                    reward = max(profit, 0)
+                elif action < 0: # sell
+                    old_money = self.money
+                    self.money += current_price * -action
+                    self.shares -= action
+                    profit = self.money - old_money
+                    reward = profit / old_money
                     total_profit += profit
-                    print("Sell: " + format_price(sold_share) + " | Profit: " + format_price(profit))
+                    print("Sell: " + format_price(current_price *-action) + " | Profit: " + format_price(profit))
 
                 done = True if t == l - 1 else False
                 self.memory.append((state, action, reward, next_state, done))
