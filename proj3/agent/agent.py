@@ -1,3 +1,6 @@
+import os
+from pathlib import Path
+
 from keras.models import Sequential
 from keras.models import load_model
 from keras.layers import Dense
@@ -22,7 +25,10 @@ class DQN:
 
         self.memory = deque(maxlen=1000)
         self.inventory = []
+
+        self.model_dir_path = Path(f"models/{self.name}")
         self.model_path = model_path
+
         self.is_eval = is_eval
 
         self.gamma = 0.95
@@ -111,7 +117,9 @@ class DQN:
                     self.expReplay(batch_size)
 
             if e % 10 == 0:
-                self.model.save(f"models/{self.name}/model_ep{e}")
+                if not self.model_dir_path.exists():
+                    os.makedirs(self.model_dir_path, exist_ok=True)
+                self.model.save(self.model_dir_path / f"model_ep{e}")
 
     def evaluate(self, stock_name):
         data = get_stock_data_vec(stock_name)
