@@ -1,4 +1,3 @@
-import keras
 from keras.models import Sequential
 from keras.models import load_model
 from keras.layers import Dense
@@ -8,7 +7,10 @@ import numpy as np
 import random
 from collections import deque
 
-class Agent:
+from functions import getState, getStockDataVec, formatPrice
+
+
+class DQN:
 	def __init__(self, state_size, is_eval=False, model_name=""):
 		self.state_size = state_size # normalized previous days
 		self.action_size = 3 # sit, buy, sell
@@ -44,7 +46,7 @@ class Agent:
 	def expReplay(self, batch_size):
 		mini_batch = []
 		l = len(self.memory)
-		for i in xrange(l - batch_size + 1, l):
+		for i in range(l - batch_size + 1, l):
 			mini_batch.append(self.memory[i])
 
 		for state, action, reward, next_state, done in mini_batch:
@@ -58,3 +60,83 @@ class Agent:
 
 		if self.epsilon > self.epsilon_min:
 			self.epsilon *= self.epsilon_decay 
+
+	def train(self, stock_name, episode_count):
+		data = getStockDataVec(stock_name)
+		l = len(data) - 1
+		batch_size = 32
+
+		for e in range(episode_count + 1):
+			print("Episode " + str(e) + "/" + str(episode_count))
+			state = getState(data, 0, self.state_size + 1)
+
+			total_profit = 0
+			self.inventory = []
+
+			for t in range(l):
+				action = self.act(state)
+
+				# sit
+				next_state = getState(data, t + 1, self.state_size + 1)
+				reward = 0
+
+				if action == 1:  # buy
+					self.inventory.append(data[t])
+					print("Buy: " + formatPrice(data[t]))
+
+				elif action == 2 and len(self.inventory) > 0:  # sell
+					bought_price = self.inventory.pop(0)
+					reward = max(data[t] - bought_price, 0)
+					total_profit += data[t] - bought_price
+					print("Sell: " + formatPrice(data[t]) + " | Profit: " + formatPrice(data[t] - bought_price))
+
+				done = True if t == l - 1 else False
+				self.memory.append((state, action, reward, next_state, done))
+				state = next_state
+
+				if done:
+					print("--------------------------------")
+					print("Total Profit: " + formatPrice(total_profit))
+					print("--------------------------------")
+
+				if len(self.memory) > batch_size:
+					self.expReplay(batch_size)
+
+			if e % 10 == 0:
+				self.model.save("models/model_ep" + str(e))
+
+	def evaluate(self, stock_name):
+		data = getStockDataVec(stock_name)
+		l = len(data) - 1
+		batch_size = 32
+
+		state = getState(data, 0, self.state_size + 1)
+		total_profit = 0
+		self.inventory = []
+
+		for t in range(l):
+			action = self.act(state)
+
+			# sit
+			next_state = getState(data, t + 1, self.state_size + 1)
+			reward = 0
+
+			if action == 1:  # buy
+				self.inventory.append(data[t])
+				print("Buy: " + formatPrice(data[t]))
+
+			elif action == 2 and len(self.inventory) > 0:  # sell
+				bought_price = self.inventory.pop(0)
+				reward = max(data[t] - bought_price, 0)
+				total_profit += data[t] - bought_price
+				print("Sell: " + formatPrice(data[t]) + " | Profit: " + formatPrice(data[t] - bought_price))
+
+			done = True if t == l - 1 else False
+			self.memory.append((state, action, reward, next_state, done))
+			state = next_state
+
+			if done:
+				print("--------------------------------")
+				print(stock_name + " Total Profit: " + formatPrice(total_profit))
+				print("--------------------------------")
+
