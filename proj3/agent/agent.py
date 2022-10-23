@@ -198,7 +198,7 @@ class ContinuousDQN(DQN):
                 variance = (interval[1] - interval[0]) * 0.1
             else:
                 raise ValueError
-            return np.random.normal(mean, variance, size=(2, 4))
+            return np.random.normal(mean, variance)
 
         return self.interpret_prediction(self.model.predict(state))
 
@@ -215,7 +215,7 @@ class ContinuousDQN(DQN):
             if not done:
                 target = -reward + self.gamma * self.interpret_prediction(self.model.predict(next_state))
 
-            self.model.fit(state, target, epochs=1, verbose=0)
+            self.model.fit(state, np.array([target]), epochs=1, verbose=0)
 
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
@@ -242,7 +242,7 @@ class ContinuousDQN(DQN):
                 if action > 0:  # buy
                     self.money -= current_price*action
                     self.shares += action
-                    print("Buy: " + format_price(current_price*action))
+                    print(f"Buy: {current_price*action}")
 
                 elif action < 0: # sell
                     old_money = self.money
@@ -251,7 +251,7 @@ class ContinuousDQN(DQN):
                     profit = self.money - old_money
                     reward = profit / old_money
                     total_profit += profit
-                    print("Sell: " + format_price(current_price *-action) + " | Profit: " + format_price(profit))
+                    print(f"Sell: {current_price *- action} | Profit : {profit}")
 
                 done = True if t == l - 1 else False
                 self.memory.append((state, action, reward, next_state, done))
@@ -259,7 +259,7 @@ class ContinuousDQN(DQN):
 
                 if done:
                     print("--------------------------------")
-                    print("Total Profit: " + format_price(total_profit))
+                    print(f"Total Profit: {total_profit}")
                     print("--------------------------------")
 
                 if len(self.memory) > batch_size:
