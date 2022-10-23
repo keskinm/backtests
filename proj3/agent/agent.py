@@ -7,7 +7,7 @@ import numpy as np
 import random
 from collections import deque
 
-from functions import getState, getStockDataVec, formatPrice
+from functions import get_state, get_stock_data_vec, format_price
 
 
 class DQN:
@@ -62,13 +62,13 @@ class DQN:
 			self.epsilon *= self.epsilon_decay 
 
 	def train(self, stock_name, episode_count):
-		data = getStockDataVec(stock_name)
+		data = get_stock_data_vec(stock_name)
 		l = len(data) - 1
 		batch_size = 32
 
 		for e in range(episode_count + 1):
 			print("Episode " + str(e) + "/" + str(episode_count))
-			state = getState(data, 0, self.state_size + 1)
+			state = get_state(data, 0, self.state_size + 1)
 
 			total_profit = 0
 			self.inventory = []
@@ -77,18 +77,18 @@ class DQN:
 				action = self.act(state)
 
 				# sit
-				next_state = getState(data, t + 1, self.state_size + 1)
+				next_state = get_state(data, t + 1, self.state_size + 1)
 				reward = 0
 
 				if action == 1:  # buy
 					self.inventory.append(data[t])
-					print("Buy: " + formatPrice(data[t]))
+					print("Buy: " + format_price(data[t]))
 
 				elif action == 2 and len(self.inventory) > 0:  # sell
 					bought_price = self.inventory.pop(0)
 					reward = max(data[t] - bought_price, 0)
 					total_profit += data[t] - bought_price
-					print("Sell: " + formatPrice(data[t]) + " | Profit: " + formatPrice(data[t] - bought_price))
+					print("Sell: " + format_price(data[t]) + " | Profit: " + format_price(data[t] - bought_price))
 
 				done = True if t == l - 1 else False
 				self.memory.append((state, action, reward, next_state, done))
@@ -96,7 +96,7 @@ class DQN:
 
 				if done:
 					print("--------------------------------")
-					print("Total Profit: " + formatPrice(total_profit))
+					print("Total Profit: " + format_price(total_profit))
 					print("--------------------------------")
 
 				if len(self.memory) > batch_size:
@@ -106,11 +106,11 @@ class DQN:
 				self.model.save("models/model_ep" + str(e))
 
 	def evaluate(self, stock_name):
-		data = getStockDataVec(stock_name)
+		data = get_stock_data_vec(stock_name)
 		l = len(data) - 1
 		batch_size = 32
 
-		state = getState(data, 0, self.state_size + 1)
+		state = get_state(data, 0, self.state_size + 1)
 		total_profit = 0
 		self.inventory = []
 
@@ -118,18 +118,18 @@ class DQN:
 			action = self.act(state)
 
 			# sit
-			next_state = getState(data, t + 1, self.state_size + 1)
+			next_state = get_state(data, t + 1, self.state_size + 1)
 			reward = 0
 
 			if action == 1:  # buy
 				self.inventory.append(data[t])
-				print("Buy: " + formatPrice(data[t]))
+				print("Buy: " + format_price(data[t]))
 
 			elif action == 2 and len(self.inventory) > 0:  # sell
 				bought_price = self.inventory.pop(0)
 				reward = max(data[t] - bought_price, 0)
 				total_profit += data[t] - bought_price
-				print("Sell: " + formatPrice(data[t]) + " | Profit: " + formatPrice(data[t] - bought_price))
+				print("Sell: " + format_price(data[t]) + " | Profit: " + format_price(data[t] - bought_price))
 
 			done = True if t == l - 1 else False
 			self.memory.append((state, action, reward, next_state, done))
@@ -137,6 +137,6 @@ class DQN:
 
 			if done:
 				print("--------------------------------")
-				print(stock_name + " Total Profit: " + formatPrice(total_profit))
+				print(stock_name + " Total Profit: " + format_price(total_profit))
 				print("--------------------------------")
 
